@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Exported SQL files
+*.sql
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output directories
+backup/
+exports/
