@@ -137,13 +137,20 @@ mysql -u root -p new_db < database_triggers_20241014_061300.sql
 ## Automated Backup (Cron)
 
 ```bash
-# Buat script backup.sh
-cat > backup.sh << 'EOF'
+# Buat script create-auto-backup.sh
+cat > create-auto-backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="/backup/mysql/$(date +%Y%m%d)"
+
+# Konfigurasi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="${SCRIPT_DIR}/exports/${TIMESTAMP}"
+
+# Buat direktori backup
 mkdir -p "$BACKUP_DIR"
 
-python3 /path/to/mariadb_exporter.py \
+# Jalankan ekspor
+python3 "${SCRIPT_DIR}/mariadb_exporter.py" \
   --host localhost \
   --user backup_user \
   --password "your_password" \
@@ -151,18 +158,37 @@ python3 /path/to/mariadb_exporter.py \
   --export-method full \
   --output-dir "$BACKUP_DIR"
 
-# Compress
-cd "$BACKUP_DIR" && tar -czf "../backup_$(date +%Y%m%d).tar.gz" *.sql && rm *.sql
+# Compress dengan timestamp lengkap
+cd "$BACKUP_DIR" && tar -czf "../backup_${TIMESTAMP}.tar.gz" *.sql && rm *.sql
+
+# Hapus direktori kosong
+rmdir "$BACKUP_DIR" 2>/dev/null
 
 # Hapus backup > 30 hari
-find /backup/mysql -name "*.tar.gz" -mtime +30 -delete
+find "${SCRIPT_DIR}/exports" -name "*.tar.gz" -mtime +30 -delete
+
+# Log hasil backup
+echo "[${TIMESTAMP}] Backup completed successfully"
 EOF
 
-chmod +x backup.sh
+chmod +x create-auto-backup.sh
 
-# Tambah ke crontab (backup jam 2 pagi setiap hari)
-# 0 2 * * * /path/to/backup.sh >> /var/log/mysql_backup.log 2>&1
+# Setup crontab untuk backup otomatis 2x sehari (jam 00:00 dan 12:00)
+# Edit crontab
+crontab -e
+
+# Tambahkan baris berikut (sesuaikan path):
+# 0 0,12 * * * /home/user/py-single-file-mysql-exporter/create-auto-backup.sh >> /home/user/mysql_backup.log 2>&1
+
+# Verifikasi crontab
+crontab -l
 ```
+
+**Penjelasan Cron Schedule:**
+- `0 0,12 * * *` = Jam 00:00 dan 12:00 setiap hari
+- `0 0 * * *` = Jam 00:00 setiap hari (1x sehari)
+- `0 */6 * * *` = Setiap 6 jam (4x sehari)
+- `0 0 * * 0` = Jam 00:00 setiap Minggu (1x seminggu)
 
 ## Best Practices
 
