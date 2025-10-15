@@ -1,6 +1,6 @@
 # MariaDB Database Exporter
 
-Script Python single-file untuk mengekspor database MariaDB/MySQL. Berinteraksi langsung dengan database tanpa menggunakan `mysqldump`.
+Script Python untuk mengekspor database MariaDB/MySQL dan mengirim backup via email. Berinteraksi langsung dengan database tanpa menggunakan `mysqldump`.
 
 ## Keunggulan
 
@@ -9,6 +9,13 @@ Script Python single-file untuk mengekspor database MariaDB/MySQL. Berinteraksi 
 - ✅ **Complete Export** - Tables, views, procedures, functions, triggers
 - ✅ **Flexible Modes** - Structure only, data only, atau full
 - ✅ **Progress Feedback** - Real-time progress di console
+- ✅ **Email Backup** - Kirim backup via email untuk proteksi external
+
+## Files
+
+- `mariadb_exporter.py` - Main script untuk ekspor database
+- `email_backup_sender.py` - Script untuk kirim backup via email
+- `test_connection.py` - Utility untuk test koneksi database
 
 ## Quick Start
 
@@ -189,6 +196,122 @@ crontab -l
 - `0 0 * * *` = Jam 00:00 setiap hari (1x sehari)
 - `0 */6 * * *` = Setiap 6 jam (4x sehari)
 - `0 0 * * 0` = Jam 00:00 setiap Minggu (1x seminggu)
+
+## Email Backup (External Backup)
+
+Script `email_backup_sender.py` untuk mengirim backup via email sebagai proteksi jika server terkena serangan hacker.
+
+### Setup Gmail App Password
+
+1. Buka https://myaccount.google.com/apppasswords
+2. Pilih "Mail" dan device "Other (Custom name)"
+3. Generate password (16 karakter)
+4. Simpan password tersebut
+
+### Kirim Backup Terbaru via Email
+
+```bash
+# Kirim backup terbaru dari folder exports
+python email_backup_sender.py \
+  --smtp-host smtp.gmail.com \
+  --smtp-port 587 \
+  --smtp-user your-email@gmail.com \
+  --smtp-password "your-app-password" \
+  --recipient webmaster@company.com \
+  --backup-dir ./exports \
+  --latest 1
+```
+
+### Kirim File Backup Spesifik
+
+```bash
+python email_backup_sender.py \
+  --smtp-host smtp.gmail.com \
+  --smtp-port 587 \
+  --smtp-user your-email@gmail.com \
+  --smtp-password "your-app-password" \
+  --recipient webmaster@company.com \
+  --files exports/backup_20241015_120000.tar.gz
+```
+
+### Automated Backup + Email (Cron)
+
+```bash
+# Buat script backup-and-email.sh
+cat > backup-and-email.sh << 'EOF'
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="${SCRIPT_DIR}/exports/${TIMESTAMP}"
+
+# 1. Jalankan backup
+mkdir -p "$BACKUP_DIR"
+python3 "${SCRIPT_DIR}/mariadb_exporter.py" \
+  --host localhost \
+  --user root \
+  --database production_db \
+  --export-method full \
+  --output-dir "$BACKUP_DIR"
+
+# 2. Compress
+cd "$BACKUP_DIR" && tar -czf "../backup_${TIMESTAMP}.tar.gz" *.sql && rm *.sql
+rmdir "$BACKUP_DIR" 2>/dev/null
+
+# 3. Kirim via email
+python3 "${SCRIPT_DIR}/email_backup_sender.py" \
+  --smtp-host smtp.gmail.com \
+  --smtp-port 587 \
+  --smtp-user your-email@gmail.com \
+  --smtp-password "$SMTP_PASSWORD" \
+  --recipient webmaster@company.com \
+  --backup-dir "${SCRIPT_DIR}/exports" \
+  --latest 1
+
+# 4. Hapus backup lokal > 7 hari (karena sudah ada di email)
+find "${SCRIPT_DIR}/exports" -name "*.tar.gz" -mtime +7 -delete
+
+echo "[${TIMESTAMP}] Backup and email sent successfully"
+EOF
+
+chmod +x backup-and-email.sh
+
+# Setup environment variable untuk password
+export SMTP_PASSWORD="your-app-password"
+
+# Tambah ke crontab
+# 0 0,12 * * * SMTP_PASSWORD="xxx" /path/to/backup-and-email.sh >> /var/log/backup.log 2>&1
+```
+
+### Parameter Email Sender
+
+**Required:**
+- `--smtp-host`: SMTP server (smtp.gmail.com, smtp.office365.com, dll)
+- `--smtp-user`: Email pengirim
+- `--smtp-password`: App Password (bukan password email biasa)
+- `--recipient`: Email penerima (webmaster)
+- `--files` atau `--backup-dir`: File yang akan dikirim
+
+**Optional:**
+- `--smtp-port`: Port SMTP (default: 587)
+- `--use-ssl`: Gunakan SSL port 465 (default: TLS port 587)
+- `--subject`: Subject email (default: "Database Backup - {timestamp}")
+- `--body`: Custom email body
+- `--latest`: Jumlah file terbaru (default: 1)
+
+### SMTP Server Populer
+
+| Provider | SMTP Host | Port TLS | Port SSL |
+|----------|-----------|----------|----------|
+| Gmail | smtp.gmail.com | 587 | 465 |
+| Outlook/Office365 | smtp.office365.com | 587 | 465 |
+| Yahoo | smtp.mail.yahoo.com | 587 | 465 |
+| Custom/cPanel | mail.yourdomain.com | 587 | 465 |
+
+**⚠️ Catatan:**
+- Gmail membatasi attachment max 25MB
+- Gunakan App Password, bukan password email biasa
+- Simpan SMTP password di environment variable, jangan hardcode
 
 ## Best Practices
 
