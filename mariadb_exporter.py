@@ -24,7 +24,9 @@ class MariaDBExporter:
     """Class untuk menangani ekspor database MariaDB."""
     
     def __init__(self, host: str, user: str, password: str, database: str, 
-                 port: int, batch_size: int, output_dir: str):
+                 port: int, batch_size: int, output_dir: str,
+                 include_views: bool = True, include_routines: bool = True, 
+                 include_triggers: bool = True):
         """
         Inisialisasi MariaDB Exporter.
         
@@ -36,6 +38,9 @@ class MariaDBExporter:
             port: Port server MariaDB
             batch_size: Jumlah baris per batch untuk ekspor data
             output_dir: Direktori output untuk file SQL
+            include_views: Flag untuk mengekspor views (default: True)
+            include_routines: Flag untuk mengekspor procedures dan functions (default: True)
+            include_triggers: Flag untuk mengekspor triggers (default: True)
         """
         self.host = host
         self.user = user
@@ -44,6 +49,9 @@ class MariaDBExporter:
         self.port = port
         self.batch_size = batch_size
         self.output_dir = output_dir
+        self.include_views = include_views
+        self.include_routines = include_routines
+        self.include_triggers = include_triggers
         self.connection = None
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -525,10 +533,13 @@ class MariaDBExporter:
             if export_method == 'full' and structure_file and data_file:
                 structure_file = self.merge_full_export(structure_file, data_file)
             
-            # Langkah 4, 5, 6: Ekspor views, routines, dan triggers (selalu dijalankan)
-            self.export_views()
-            self.export_routines()
-            self.export_triggers()
+            # Langkah 4, 5, 6: Ekspor views, routines, dan triggers (jika diaktifkan)
+            if self.include_views:
+                self.export_views()
+            if self.include_routines:
+                self.export_routines()
+            if self.include_triggers:
+                self.export_triggers()
             
             print(f"\n{'='*70}")
             print(f"Ekspor selesai!")
@@ -565,6 +576,18 @@ Contoh penggunaan:
   
   # Ekspor data saja dengan batch size custom
   python mariadb_exporter.py --host localhost --user root --password "pass" --database mydb --export-method data --batch-size 10000
+  
+  # Ekspor tanpa views
+  python mariadb_exporter.py --host localhost --user root --password "pass" --database mydb --export-method full --no-views
+  
+  # Ekspor tanpa routines (procedures & functions)
+  python mariadb_exporter.py --host localhost --user root --password "pass" --database mydb --export-method full --no-routines
+  
+  # Ekspor tanpa triggers
+  python mariadb_exporter.py --host localhost --user root --password "pass" --database mydb --export-method full --no-triggers
+  
+  # Ekspor hanya tabel (tanpa views, routines, dan triggers)
+  python mariadb_exporter.py --host localhost --user root --password "pass" --database mydb --export-method full --no-views --no-routines --no-triggers
         """
     )
     
@@ -623,6 +646,24 @@ Contoh penggunaan:
         help='Direktori untuk menyimpan file SQL hasil ekspor (default: direktori saat ini)'
     )
     
+    parser.add_argument(
+        '--no-views',
+        action='store_true',
+        help='Jangan ekspor views (default: ekspor views)'
+    )
+    
+    parser.add_argument(
+        '--no-routines',
+        action='store_true',
+        help='Jangan ekspor stored procedures dan functions (default: ekspor routines)'
+    )
+    
+    parser.add_argument(
+        '--no-triggers',
+        action='store_true',
+        help='Jangan ekspor triggers (default: ekspor triggers)'
+    )
+    
     return parser.parse_args()
 
 
@@ -643,7 +684,10 @@ def main():
         database=args.database,
         port=args.port,
         batch_size=args.batch_size,
-        output_dir=args.output_dir
+        output_dir=args.output_dir,
+        include_views=not args.no_views,
+        include_routines=not args.no_routines,
+        include_triggers=not args.no_triggers
     )
     
     exporter.export(args.export_method)

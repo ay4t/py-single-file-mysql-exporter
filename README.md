@@ -57,6 +57,9 @@ python mariadb_exporter.py --host <HOST> --user <USER> --database <DATABASE> [OP
   - `full`: Ekspor struktur dan data
 - `--batch-size`: Jumlah baris per batch INSERT (default: 5000)
 - `--output-dir`: Direktori output (default: direktori saat ini)
+- `--no-views`: Jangan ekspor views (default: ekspor views)
+- `--no-routines`: Jangan ekspor stored procedures dan functions (default: ekspor routines)
+- `--no-triggers`: Jangan ekspor triggers (default: ekspor triggers)
 
 ## Contoh Penggunaan
 
@@ -68,7 +71,7 @@ python mariadb_exporter.py \
   --user root \
   --database my_app_db \
   --export-method full \
-  --output-dir /backup/mysql
+  --output-dir ./exports
 ```
 
 ### 2. Ekspor Full - Dengan Password
@@ -80,7 +83,7 @@ python mariadb_exporter.py \
   --password "your_password" \
   --database my_app_db \
   --export-method full \
-  --output-dir /backup/mysql
+  --output-dir ./exports
 ```
 
 ### 3. Ekspor Struktur Saja
@@ -115,7 +118,58 @@ python mariadb_exporter.py \
   --user admin \
   --password "admin_pass" \
   --database ecommerce_db \
-  --export-method full
+  --export-method full \
+  --output-dir ./exports
+```
+
+### 6. Ekspor Tanpa Views
+
+```bash
+python mariadb_exporter.py \
+  --host localhost \
+  --user root \
+  --password "your_password" \
+  --database my_app_db \
+  --export-method full \
+  --no-views
+```
+
+### 7. Ekspor Tanpa Routines (Procedures & Functions)
+
+```bash
+python mariadb_exporter.py \
+  --host localhost \
+  --user root \
+  --password "your_password" \
+  --database my_app_db \
+  --export-method full \
+  --no-routines
+```
+
+### 8. Ekspor Tanpa Triggers
+
+```bash
+python mariadb_exporter.py \
+  --host localhost \
+  --user root \
+  --password "your_password" \
+  --database my_app_db \
+  --export-method full \
+  --no-triggers
+```
+
+### 9. Ekspor Hanya Tabel (Tanpa Views, Routines, dan Triggers)
+
+```bash
+python mariadb_exporter.py \
+  --host localhost \
+  --user root \
+  --password "your_password" \
+  --database my_app_db \
+  --export-method full \
+  --no-views \
+  --no-routines \
+  --no-triggers
 ```
 
 ## Output Files
@@ -124,9 +178,9 @@ Script menghasilkan file SQL dengan timestamp:
 
 - `<database>_structure_<timestamp>.sql` - Struktur tabel (DDL)
 - `<database>_data_<timestamp>.sql` - Data tabel (DML) *[mode full: merged ke structure]*
-- `<database>_views_<timestamp>.sql` - Views
-- `<database>_routines_<timestamp>.sql` - Procedures & Functions
-- `<database>_triggers_<timestamp>.sql` - Triggers
+- `<database>_views_<timestamp>.sql` - Views (jika tidak pakai `--no-views`)
+- `<database>_routines_<timestamp>.sql` - Procedures & Functions (jika tidak pakai `--no-routines`)
+- `<database>_triggers_<timestamp>.sql` - Triggers (jika tidak pakai `--no-triggers`)
 
 ## Restore Database
 
