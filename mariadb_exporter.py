@@ -8,6 +8,7 @@ Script ini berinteraksi langsung dengan database tanpa menggunakan mysqldump.
 import argparse
 import sys
 import os
+import re
 from datetime import datetime
 from typing import List, Tuple, Optional, Any
 
@@ -221,6 +222,8 @@ class MariaDBExporter:
                 result = cursor.fetchone()
                 if result:
                     create_table_sql = result[1]
+                    # Hapus klausa AUTO_INCREMENT menggunakan regex
+                    create_table_sql = re.sub(r' AUTO_INCREMENT=\d+', '', create_table_sql)
                     f.write(f"{create_table_sql};\n\n")
             
             cursor.close()
