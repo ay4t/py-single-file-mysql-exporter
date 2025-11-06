@@ -271,9 +271,16 @@ class MariaDBExporter:
                     f.write(f"-- Table {table} is empty\n\n")
                     continue
                 
-                # Dapatkan nama kolom
+                # Dapatkan nama kolom dan filter kolom GENERATED
                 cursor.execute(f"SHOW COLUMNS FROM `{table}`")
-                columns = [row[0] for row in cursor.fetchall()]
+                all_columns_info = cursor.fetchall()
+                
+                columns = []
+                for col_info in all_columns_info:
+                    # Kolom 'Extra' (indeks 5) berisi info seperti 'VIRTUAL GENERATED'
+                    if 'GENERATED' not in col_info[5]:
+                        columns.append(col_info[0])
+                
                 columns_str = ', '.join([f"`{col}`" for col in columns])
                 
                 # Ekspor data dengan batching
