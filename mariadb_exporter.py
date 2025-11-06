@@ -282,7 +282,8 @@ class MariaDBExporter:
                         columns.append(col_info[0])
                 
                 columns_str = ', '.join([f"`{col}`" for col in columns])
-                
+                select_columns_str = ', '.join([f"`{col}`" for col in columns])
+
                 # Ekspor data dengan batching
                 offset = 0
                 batch_num = 1
@@ -291,9 +292,9 @@ class MariaDBExporter:
                 while offset < total_rows:
                     print(f"  Batch {batch_num}/{total_batches} (offset: {offset})...")
                     
-                    cursor.execute(
-                        f"SELECT * FROM `{table}` LIMIT {self.batch_size} OFFSET {offset}"
-                    )
+                    # Gunakan daftar kolom yang sudah difilter untuk SELECT
+                    query = f"SELECT {select_columns_str} FROM `{table}` LIMIT {self.batch_size} OFFSET {offset}"
+                    cursor.execute(query)
                     rows = cursor.fetchall()
                     
                     if rows:
