@@ -232,25 +232,42 @@ class MariaDBExporter:
         print(f"Struktur tabel berhasil diekspor ke: {output_file}")
         return output_file
     
-    def export_tables_data(self) -> str:
+    def export_tables_data(self, append_to_file: str = None) -> str:
         """
         Mengekspor data (DML) semua tabel ke file SQL dengan batching.
+        
+        Args:
+            append_to_file: Jika diisi, data akan di-append ke file ini (untuk mode full)
         
         Returns:
             Path file output
         """
-        output_file = os.path.join(
-            self.output_dir, 
-            f"{self.database}_data_{self.timestamp}.sql"
-        )
+        if append_to_file:
+            output_file = append_to_file
+            file_mode = 'a'  # Append mode
+        else:
+            output_file = os.path.join(
+                self.output_dir, 
+                f"{self.database}_data_{self.timestamp}.sql"
+            )
+            file_mode = 'w'  # Write mode
         
         print(f"\n=== Mengekspor Data Tabel ===")
         tables = self.get_tables()
         
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(f"-- MariaDB Database Data Export\n")
-            f.write(f"-- Database: {self.database}\n")
-            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        with open(output_file, file_mode, encoding='utf-8') as f:
+            if append_to_file:
+                # Mode full: append dengan separator
+                f.write(f"\n\n")
+                f.write(f"-- " + "="*70 + "\n")
+                f.write(f"-- DATA SECTION\n")
+                f.write(f"-- " + "="*70 + "\n\n")
+            else:
+                # Mode data only: header lengkap
+                f.write(f"-- MariaDB Database Data Export\n")
+                f.write(f"-- Database: {self.database}\n")
+                f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
             f.write(f"SET NAMES utf8mb4;\n")
             f.write(f"SET FOREIGN_KEY_CHECKS=0;\n")
             f.write(f"START TRANSACTION;\n\n")
@@ -530,6 +547,7 @@ class MariaDBExporter:
     def merge_full_export(self, structure_file: str, data_file: str) -> str:
         """
         Menggabungkan file struktur dan data menjadi satu file untuk mode full.
+        Menggunakan shell command untuk performa maksimal, fallback ke Python streaming.
         
         Args:
             structure_file: Path file struktur
@@ -540,17 +558,33 @@ class MariaDBExporter:
         """
         print(f"\n=== Menggabungkan File Struktur dan Data ===")
         
-        # Baca konten file data
-        with open(data_file, 'r', encoding='utf-8') as f:
-            data_content = f.read()
+        import subprocess
+        import platform
         
-        # Append ke file struktur
-        with open(structure_file, 'a', encoding='utf-8') as f:
-            f.write('\n\n')
-            f.write('-- ' + '='*70 + '\n')
-            f.write('-- DATA SECTION\n')
-            f.write('-- ' + '='*70 + '\n\n')
-            f.write(data_content)
+        # Coba gunakan shell command untuk performa maksimal
+        if platform.system() != 'Windows':
+            try:
+                # Tambahkan separator
+                with open(structure_file, 'a', encoding='utf-8') as f:
+                    f.write('\n\n')
+                    f.write('-- ' + '='*70 + '\n')
+                    f.write('-- DATA SECTION\n')
+                    f.write('-- ' + '='*70 + '\n\n')
+                
+                # Gunakan cat untuk append (paling cepat)
+                result = subprocess.run(
+                    ['cat', data_file],
+                    stdout=open(structure_file, 'ab'),
+                    stderr=subprocess.PIPE,
+                    check=True
+                )
+                print(f"File berhasil digabungkan (menggunakan shell command).")
+            except Exception as e:
+                print(f"Shell command gagal, fallback ke Python streaming: {e}")
+                self._merge_with_streaming(structure_file, data_file)
+        else:
+            # Windows: gunakan Python streaming
+            self._merge_with_streaming(structure_file, data_file)
         
         # Hapus file data sementara
         os.remove(data_file)
@@ -558,6 +592,25 @@ class MariaDBExporter:
         
         print(f"File full export berhasil dibuat: {structure_file}")
         return structure_file
+    
+    def _merge_with_streaming(self, structure_file: str, data_file: str):
+        """
+        Fallback method untuk merge menggunakan Python streaming.
+        """
+        CHUNK_SIZE = 1024 * 1024  # 1 MB
+        
+        with open(structure_file, 'a', encoding='utf-8') as f_out:
+            f_out.write('\n\n')
+            f_out.write('-- ' + '='*70 + '\n')
+            f_out.write('-- DATA SECTION\n')
+            f_out.write('-- ' + '='*70 + '\n\n')
+            
+            with open(data_file, 'r', encoding='utf-8') as f_in:
+                while True:
+                    chunk = f_in.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    f_out.write(chunk)
     
     def export(self, export_method: str):
         """
@@ -584,12 +637,14 @@ class MariaDBExporter:
             if export_method in ['structure', 'full']:
                 structure_file = self.export_tables_structure()
             
-            if export_method in ['data', 'full']:
+            if export_method == 'full':
+                # Mode full: write data langsung ke structure file (optimal)
+                print(f"Mode full: menulis data langsung ke file struktur (no merge needed)")
+                data_file = self.export_tables_data(append_to_file=structure_file)
+                # Tidak perlu merge karena sudah langsung ditulis
+            elif export_method == 'data':
+                # Mode data only: buat file terpisah
                 data_file = self.export_tables_data()
-            
-            # Langkah 3: Merge untuk mode full
-            if export_method == 'full' and structure_file and data_file:
-                structure_file = self.merge_full_export(structure_file, data_file)
             
             # Langkah 4, 5, 6: Ekspor views, routines, dan triggers (jika diaktifkan)
             if self.include_views:
