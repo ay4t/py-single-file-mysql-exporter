@@ -337,33 +337,45 @@ class MariaDBExporter:
         )
         
         print(f"\n=== Mengekspor Views ===")
-        views = self.get_views()
         
-        if not views:
-            print("Tidak ada view yang ditemukan.")
-            return output_file
+        try:
+            views = self.get_views()
+            print(f"Ditemukan {len(views)} view(s): {views}")
+        except Exception as e:
+            print(f"Error saat mengambil daftar views: {e}")
+            views = []
         
+        # Selalu buat file, bahkan jika kosong
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"-- MariaDB Database Views Export\n")
             f.write(f"-- Database: {self.database}\n")
-            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"-- Total Views: {len(views)}\n\n")
             f.write(f"SET NAMES utf8mb4;\n\n")
             
-            cursor = self.connection.cursor()
-            
-            for view in views:
-                print(f"Mengekspor view `{view}`...")
+            if not views:
+                f.write(f"-- No views found in this database\n")
+                print("Tidak ada view yang ditemukan.")
+            else:
+                cursor = self.connection.cursor()
                 
-                f.write(f"-- View: {view}\n")
-                f.write(f"DROP VIEW IF EXISTS `{view}`;\n")
+                for view in views:
+                    print(f"Mengekspor view `{view}`...")
+                    
+                    try:
+                        f.write(f"-- View: {view}\n")
+                        f.write(f"DROP VIEW IF EXISTS `{view}`;\n")
+                        
+                        cursor.execute(f"SHOW CREATE VIEW `{view}`")
+                        result = cursor.fetchone()
+                        if result:
+                            create_view_sql = result[1]
+                            f.write(f"{create_view_sql};\n\n")
+                    except Exception as e:
+                        print(f"  Error saat mengekspor view `{view}`: {e}")
+                        f.write(f"-- ERROR: Could not export view {view}: {e}\n\n")
                 
-                cursor.execute(f"SHOW CREATE VIEW `{view}`")
-                result = cursor.fetchone()
-                if result:
-                    create_view_sql = result[1]
-                    f.write(f"{create_view_sql};\n\n")
-            
-            cursor.close()
+                cursor.close()
         
         print(f"Views berhasil diekspor ke: {output_file}")
         return output_file
@@ -381,54 +393,77 @@ class MariaDBExporter:
         )
         
         print(f"\n=== Mengekspor Routines (Procedures & Functions) ===")
-        procedures = self.get_procedures()
-        functions = self.get_functions()
         
-        if not procedures and not functions:
-            print("Tidak ada routine yang ditemukan.")
-            return output_file
+        try:
+            procedures = self.get_procedures()
+            print(f"Ditemukan {len(procedures)} procedure(s): {procedures}")
+        except Exception as e:
+            print(f"Error saat mengambil daftar procedures: {e}")
+            procedures = []
         
+        try:
+            functions = self.get_functions()
+            print(f"Ditemukan {len(functions)} function(s): {functions}")
+        except Exception as e:
+            print(f"Error saat mengambil daftar functions: {e}")
+            functions = []
+        
+        # Selalu buat file, bahkan jika kosong
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"-- MariaDB Database Routines Export\n")
             f.write(f"-- Database: {self.database}\n")
-            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"-- Total Procedures: {len(procedures)}\n")
+            f.write(f"-- Total Functions: {len(functions)}\n\n")
             f.write(f"SET NAMES utf8mb4;\n\n")
             
-            cursor = self.connection.cursor()
-            
-            # Export Procedures
-            for procedure in procedures:
-                print(f"Mengekspor procedure `{procedure}`...")
+            if not procedures and not functions:
+                f.write(f"-- No routines found in this database\n")
+                print("Tidak ada routine yang ditemukan.")
+            else:
+                cursor = self.connection.cursor()
                 
-                f.write(f"-- Procedure: {procedure}\n")
-                f.write(f"DROP PROCEDURE IF EXISTS `{procedure}`;\n")
-                f.write(f"DELIMITER $$\n")
+                # Export Procedures
+                for procedure in procedures:
+                    print(f"Mengekspor procedure `{procedure}`...")
+                    
+                    try:
+                        f.write(f"-- Procedure: {procedure}\n")
+                        f.write(f"DROP PROCEDURE IF EXISTS `{procedure}`;\n")
+                        f.write(f"DELIMITER $$\n")
+                        
+                        cursor.execute(f"SHOW CREATE PROCEDURE `{procedure}`")
+                        result = cursor.fetchone()
+                        if result:
+                            create_proc_sql = result[2]  # Index 2 berisi Create Procedure
+                            f.write(f"{create_proc_sql}$$\n")
+                        
+                        f.write(f"DELIMITER ;\n\n")
+                    except Exception as e:
+                        print(f"  Error saat mengekspor procedure `{procedure}`: {e}")
+                        f.write(f"-- ERROR: Could not export procedure {procedure}: {e}\n\n")
                 
-                cursor.execute(f"SHOW CREATE PROCEDURE `{procedure}`")
-                result = cursor.fetchone()
-                if result:
-                    create_proc_sql = result[2]  # Index 2 berisi Create Procedure
-                    f.write(f"{create_proc_sql}$$\n")
+                # Export Functions
+                for function in functions:
+                    print(f"Mengekspor function `{function}`...")
+                    
+                    try:
+                        f.write(f"-- Function: {function}\n")
+                        f.write(f"DROP FUNCTION IF EXISTS `{function}`;\n")
+                        f.write(f"DELIMITER $$\n")
+                        
+                        cursor.execute(f"SHOW CREATE FUNCTION `{function}`")
+                        result = cursor.fetchone()
+                        if result:
+                            create_func_sql = result[2]  # Index 2 berisi Create Function
+                            f.write(f"{create_func_sql}$$\n")
+                        
+                        f.write(f"DELIMITER ;\n\n")
+                    except Exception as e:
+                        print(f"  Error saat mengekspor function `{function}`: {e}")
+                        f.write(f"-- ERROR: Could not export function {function}: {e}\n\n")
                 
-                f.write(f"DELIMITER ;\n\n")
-            
-            # Export Functions
-            for function in functions:
-                print(f"Mengekspor function `{function}`...")
-                
-                f.write(f"-- Function: {function}\n")
-                f.write(f"DROP FUNCTION IF EXISTS `{function}`;\n")
-                f.write(f"DELIMITER $$\n")
-                
-                cursor.execute(f"SHOW CREATE FUNCTION `{function}`")
-                result = cursor.fetchone()
-                if result:
-                    create_func_sql = result[2]  # Index 2 berisi Create Function
-                    f.write(f"{create_func_sql}$$\n")
-                
-                f.write(f"DELIMITER ;\n\n")
-            
-            cursor.close()
+                cursor.close()
         
         print(f"Routines berhasil diekspor ke: {output_file}")
         return output_file
@@ -446,36 +481,48 @@ class MariaDBExporter:
         )
         
         print(f"\n=== Mengekspor Triggers ===")
-        triggers = self.get_triggers()
         
-        if not triggers:
-            print("Tidak ada trigger yang ditemukan.")
-            return output_file
+        try:
+            triggers = self.get_triggers()
+            print(f"Ditemukan {len(triggers)} trigger(s): {triggers}")
+        except Exception as e:
+            print(f"Error saat mengambil daftar triggers: {e}")
+            triggers = []
         
+        # Selalu buat file, bahkan jika kosong
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"-- MariaDB Database Triggers Export\n")
             f.write(f"-- Database: {self.database}\n")
-            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"-- Total Triggers: {len(triggers)}\n\n")
             f.write(f"SET NAMES utf8mb4;\n\n")
             
-            cursor = self.connection.cursor()
-            
-            for trigger in triggers:
-                print(f"Mengekspor trigger `{trigger}`...")
+            if not triggers:
+                f.write(f"-- No triggers found in this database\n")
+                print("Tidak ada trigger yang ditemukan.")
+            else:
+                cursor = self.connection.cursor()
                 
-                f.write(f"-- Trigger: {trigger}\n")
-                f.write(f"DROP TRIGGER IF EXISTS `{trigger}`;\n")
-                f.write(f"DELIMITER $$\n")
+                for trigger in triggers:
+                    print(f"Mengekspor trigger `{trigger}`...")
+                    
+                    try:
+                        f.write(f"-- Trigger: {trigger}\n")
+                        f.write(f"DROP TRIGGER IF EXISTS `{trigger}`;\n")
+                        f.write(f"DELIMITER $$\n")
+                        
+                        cursor.execute(f"SHOW CREATE TRIGGER `{trigger}`")
+                        result = cursor.fetchone()
+                        if result:
+                            create_trigger_sql = result[2]  # Index 2 berisi SQL Original Statement
+                            f.write(f"{create_trigger_sql}$$\n")
+                        
+                        f.write(f"DELIMITER ;\n\n")
+                    except Exception as e:
+                        print(f"  Error saat mengekspor trigger `{trigger}`: {e}")
+                        f.write(f"-- ERROR: Could not export trigger {trigger}: {e}\n\n")
                 
-                cursor.execute(f"SHOW CREATE TRIGGER `{trigger}`")
-                result = cursor.fetchone()
-                if result:
-                    create_trigger_sql = result[2]  # Index 2 berisi SQL Original Statement
-                    f.write(f"{create_trigger_sql}$$\n")
-                
-                f.write(f"DELIMITER ;\n\n")
-            
-            cursor.close()
+                cursor.close()
         
         print(f"Triggers berhasil diekspor ke: {output_file}")
         return output_file
